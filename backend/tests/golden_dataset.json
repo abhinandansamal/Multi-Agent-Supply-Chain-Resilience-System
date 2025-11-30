@@ -1,0 +1,23 @@
+[
+    {
+        "id": "scenario_01",
+        "input": "Taiwan",
+        "expected_risk": "CRITICAL",
+        "expected_entities": ["Logic-Core-CPU"],
+        "description": "Earthquake in Taiwan must trigger Critical Risk alert for CPUs."
+    },
+    {
+        "id": "scenario_02",
+        "input": "Vietnam",
+        "expected_risk": "LOW",
+        "expected_entities": [],
+        "description": "Normal weather in Vietnam should result in Low Risk."
+    },
+    {
+        "id": "scenario_03",
+        "input": "USA", 
+        "expected_risk": "MEDIUM",
+        "expected_entities": ["TypeC"],
+        "description": "Port strikes in USA should trigger Medium Risk for local connectors."
+    }
+]

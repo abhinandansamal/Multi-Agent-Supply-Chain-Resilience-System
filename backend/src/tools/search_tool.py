@@ -19,6 +19,11 @@ MOCK_NEWS_DATABASE = {
         "Vietnam Port Authority reports normal operations despite heavy rains.",
         "Tech manufacturing exports from Hanoi see 5% growth this quarter."
     ],
+    "usa": [
+        "West Coast Port Strike: Logistics stalled in California.",
+        "Shipping delays expected for domestic electronics components.",
+        "US Logistics union announces 48-hour walkout."
+    ],
     "logistics": [
         "Global container shipping rates stabilize after last month's spike.",
         "Air freight capacity increases on trans-pacific routes."
@@ -40,12 +45,12 @@ def search_news(query: str) -> str:
     results = []
 
     # 1. Check our "Demo Scenarios" first
-    if "taiwan" in query_lower:
-        results.extend(MOCK_NEWS_DATABASE["taiwan"])
-    elif "vietnam" in query_lower:
-        results.extend(MOCK_NEWS_DATABASE["vietnam"])
-    elif "logistics" in query_lower or "shipping" in query_lower:
-        results.extend(MOCK_NEWS_DATABASE["logistics"])
+    # We check if any key from our database exists in the query
+    found_key = False
+    for key, articles in MOCK_NEWS_DATABASE.items():
+        if key in query_lower:
+            results.extend(articles)
+            found_key = True
     
     # 2. Format the output
     if results:
@@ -53,7 +58,7 @@ def search_news(query: str) -> str:
         for i, news in enumerate(results, 1):
             formatted_news += f"{i}. {news}\n"
         
-        logger.debug(f"Found {len(results)} articles for query.")
+        logger.info(f"Found {len(results)} articles for query.")
         return formatted_news
 
     # 3. Fallback for unknown queries
@@ -63,4 +68,4 @@ def search_news(query: str) -> str:
 if __name__ == "__main__":
     # Test the tool
     print("🧪 Testing Search Tool...")
-    print(search_news("Is there any disaster in Taiwan?"))
+    print(search_news("USA"))
