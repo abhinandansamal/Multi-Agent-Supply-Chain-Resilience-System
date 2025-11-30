@@ -1,0 +1,8 @@
+[
+  {
+    "topic": "Supplier:Global-Chips-Inc",
+    "insight": "Order rejected. Details: \u274c ORDER REJECTED: Supplier says 'We are currently out of stock for Expensive-CPU.'",
+    "source": "ProcurementAgent",
+    "timestamp": "4306069.79"
+  }
+]

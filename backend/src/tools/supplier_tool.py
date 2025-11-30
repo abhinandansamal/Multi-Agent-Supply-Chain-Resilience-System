@@ -10,6 +10,29 @@ mcp = FastMCP("Sentinell_Procurement")
 SUPPLIER_API_URL = "http://localhost:8001/v1/order"
 
 @mcp.tool()
+def get_price_quote(part_name: str, quantity: int, urgent: bool = False) -> str:
+    """
+    Gets a price estimate from the supplier WITHOUT placing an order.
+    Use this to check costs before committing to a purchase.
+    
+    Args:
+        part_name (str): The SKU name.
+        quantity (int): Number of units.
+        urgent (bool): Shipping urgency.
+        
+    Returns:
+        str: JSON string containing the estimated total cost.
+    """
+    # For this mock, we simulate the same pricing logic as the server
+    # In a real app, we would hit a GET /quote endpoint
+    base_price = 50.0
+    shipping = 500.0 if urgent else 100.0
+    estimated_total = (quantity * base_price) + shipping
+    
+    logger.info(f"💲 Quote requested: {quantity}x{part_name} = ${estimated_total}")
+    return json.dumps({"estimated_cost": estimated_total, "currency": "USD"})
+
+@mcp.tool()
 def order_parts_from_supplier(part_name: str, quantity: int, urgent: bool = False) -> str:
     """
     Sends a purchase order to an external supplier via the A2A (Agent-to-Agent) protocol.

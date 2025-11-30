@@ -1,13 +1,13 @@
 import vertexai
+import json
 from vertexai.generative_models import (
     GenerativeModel, 
     Tool, 
-    Part, 
-    ChatSession
+    Part
 )
 from src.config import settings
 from src.utils.logger import setup_logger
-from src.tools.supplier_tool import order_parts_from_supplier
+from src.tools.supplier_tool import order_parts_from_supplier, get_price_quote
 from src.memory.memory_bank import MemoryBank
 
 # Initialize Agent Logger
@@ -47,14 +47,27 @@ class ProcurementAgent:
         self.tools_schema = Tool.from_dict({
             "function_declarations": [
                 {
-                    "name": "order_parts_from_supplier",
-                    "description": "Send a purchase order to the external supplier.",
+                    "name": "get_price_quote",
+                    "description": "Check the price of items before buying.",
                     "parameters": {
                         "type": "object",
                         "properties": {
-                            "part_name": {"type": "string", "description": "The SKU to buy (e.g., 'Logic-Core-CPU-X1')"},
-                            "quantity": {"type": "integer", "description": "Number of units"},
-                            "urgent": {"type": "boolean", "description": "True if critical risk, False otherwise"}
+                            "part_name": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                            "urgent": {"type": "boolean"}
+                        },
+                        "required": ["part_name", "quantity"]
+                    }
+                },
+                {
+                    "name": "order_parts_from_supplier",
+                    "description": "Execute the final purchase order.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "part_name": {"type": "string"},
+                            "quantity": {"type": "integer"},
+                            "urgent": {"type": "boolean"}
                         },
                         "required": ["part_name", "quantity"]
                     }
@@ -69,92 +82,115 @@ class ProcurementAgent:
             system_instruction="""
             You are the Procurement Manager for Sentinell.ai.
             
-            YOUR MISSION:
-            1. Receive a buying task.
-            2. CHECK MEMORY CONTEXT provided in the prompt for any past issues with suppliers.
-            3. If memory says the supplier is 'Unreliable' or 'Blocked', ABORT the order.
-            4. Otherwise, use 'order_parts_from_supplier' to execute.
-            5. If the order fails, REPORT the failure clearly.
+            CRITICAL PROTOCOL:
+            1. CHECK USER APPROVAL FIRST:
+               - If the prompt says "USER APPROVAL: APPROVED", you MUST proceed to execute the order immediately. Ignore budget limits.
+            
+            2. IF NOT APPROVED YET:
+               - Use 'get_price_quote' to check the cost.
+               - If cost > $5000: STOP immediately. Output exactly: "PAUSED: APPROVAL REQUIRED (Cost: $...)".
+               - If cost <= $5000: PROCEED to execute.
+            
+            3. EXECUTION:
+               - Use 'order_parts_from_supplier' to finalize.
             """
         )
 
     def _execute_tool(self, func_name: str, func_args: dict) -> str:
-        """Executes the mapped tool function."""
+        """
+        Routes tool calls to the underlying Python functions.
+        Includes logic to learn from failures (updating Memory Bank).
+        """
         try:
-            logger.info(f"🛒 Procurement Action: {func_name} | Args: {func_args}")
-            if func_name == "order_parts_from_supplier":
-                return order_parts_from_supplier(
+            logger.info(f"🔧 Tool Call: {func_name} | Args: {func_args}")
+            
+            if func_name == "get_price_quote":
+                return get_price_quote(
                     part_name=func_args["part_name"],
                     quantity=int(func_args["quantity"]),
                     urgent=bool(func_args.get("urgent", False))
                 )
-            
-                # --- MEMORY LEARNING MOMENT ---
-                # If an order fails, we should remember it!
+                
+            elif func_name == "order_parts_from_supplier":
+                result = order_parts_from_supplier(
+                    part_name=func_args["part_name"],
+                    quantity=int(func_args["quantity"]),
+                    urgent=bool(func_args.get("urgent", False))
+                )
+                
+                # Learning Moment: If order failed, verify why and remember it
                 if "REJECTED" in result:
                     self.memory.add_learning(
                         topic="Supplier:Global-Chips-Inc", 
-                        insight=f"Order rejected for {func_args['part_name']}. Reason: {result}",
+                        insight=f"Order rejected. Details: {result}",
                         source="ProcurementAgent"
                     )
                 return result
+            
             else:
                 return f"Error: Unknown tool '{func_name}'"
+                
         except Exception as e:
             logger.error(f"Tool execution failed: {e}")
             return f"Tool Error: {str(e)}"
 
-    def create_order(self, part_name: str, quantity: int, risk_level: str) -> str:
+    def create_order(self, part_name: str, quantity: int, risk_level: str, user_approval: bool = False) -> str:
         """
-        Triggers the agent to place an order.
+        Executes the procurement workflow.
         
-        Recall Memory
-        We assume for this demo the main supplier is "Global-Chips-Inc"
-        In a real app, we'd look up the supplier for the part first.
-
         Args:
-            part_name (str): Item to buy.
-            quantity (int): How many.
-            risk_level (str): If 'CRITICAL', marks order as urgent.
+            part_name (str): The item to purchase.
+            quantity (int): The number of units.
+            risk_level (str): Used to determine urgency (CRITICAL = True).
+            user_approval (bool): If True, overrides the budget pause for high-value orders.
+
+        Returns:
+            str: The final agent report or status message.
         """
+        # 1. Recall Memory Context
         memory_context = self.memory.recall("Supplier:Global-Chips-Inc")
         
-        logger.info(f"🧠 Memory Context retrieved: {memory_context[:100]}...")
+        # 2. Determine Urgency
+        is_urgent = (risk_level.upper() == "CRITICAL")
+        approval_status = "APPROVED" if user_approval else "PENDING_APPROVAL"
 
         prompt = f"""
-        TASK: Purchase {quantity} units of {part_name}. Risk level is {risk_level}.
+        TASK: Purchase {quantity} units of {part_name}.
+        URGENCY: {is_urgent} (Risk Level: {risk_level}).
+        USER APPROVAL: {approval_status}.
         
-        MEMORY CONTEXT ABOUT SUPPLIER:
+        MEMORY CONTEXT:
         {memory_context}
-        
-        INSTRUCTION:
-        If the memory indicates recent severe failures, you may choose to warn the user instead of ordering.
-        Otherwise, proceed with the order.
         """
         
-        logger.info(f"🔄 Starting Procurement Task...")
+        logger.info(f"🔄 Starting Procurement Task for {part_name}...")
         chat = self.model.start_chat()
         response = chat.send_message(prompt)
         
-        # --- ReAct Loop ---
-        # Similar logic to Watchtower, but focused on buying
-        max_turns = 3
+        max_turns = 5
         current_turn = 0
         
         while current_turn < max_turns:
             candidate = response.candidates[0]
             function_call = None
             
-            # Check for function call
+            # Robust parsing for mixed content (Thought vs Tool)
             for part in candidate.content.parts:
                 if part.function_call:
                     function_call = part.function_call
-                    continue # Skip text check for this part
+                    continue
                 
+                # Check for Text output (Thoughts or Pause Signals)
                 try:
                     if part.text:
-                        logger.info(f"🤔 Procurement Thought: {part.text.strip()[:100]}...")
-                except:
+                        text = part.text.strip()
+                        logger.info(f"🤔 Procurement Thought: {text[:100]}...")
+                        
+                        # Check for PAUSE signal
+                        if "PAUSED:" in text:
+                            logger.warning(f"⏸️ Workflow Paused: {text}")
+                            return text 
+                except Exception:
                     pass
 
             if function_call:
@@ -171,24 +207,27 @@ class ProcurementAgent:
                 )
                 current_turn += 1
             else:
+                # Task Complete
                 logger.info("✅ Procurement Task Complete.")
-                
-                final_text = ""
-                for part in candidate.content.parts:
-                    try:
-                        if part.text: final_text += part.text
-                    except: pass
+                final_text = "".join([p.text for p in candidate.content.parts if p.text])
                 return final_text
 
         return "Error: Procurement Agent timed out."
 
+
 if __name__ == "__main__":
-    # MANUAL TEST
-    # 1. Ensure 'python src/a2a/mock_supplier.py' is running in another terminal!
+    # Internal Unit Test
     try:
         agent = ProcurementAgent()
-        print("\n--- 🛒 TEST: Buying 50 CPUs (Urgent) ---")
-        report = agent.create_order("Logic-Core-CPU-X1", 50, "CRITICAL")
-        print("\n📝 AGENT REPORT:\n" + report)
+        
+        print("\n--- 🛑 TEST 1: High Cost Order (Expect PAUSE) ---")
+        # 200 units * $50 = $10,000 > $5,000 Limit
+        result_pause = agent.create_order("Expensive-CPU", 200, "LOW", user_approval=False)
+        print(f"Result: {result_pause}")
+        
+        print("\n--- 🟢 TEST 2: Resume with Approval (Expect SUCCESS) ---")
+        result_success = agent.create_order("Expensive-CPU", 200, "LOW", user_approval=True)
+        print(f"Result: {result_success}")
+        
     except Exception as e:
         print(f"❌ Test Failed: {e}")
