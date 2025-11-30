@@ -8,6 +8,7 @@ from vertexai.generative_models import (
 from src.config import settings
 from src.utils.logger import setup_logger
 from src.tools.supplier_tool import order_parts_from_supplier
+from src.memory.memory_bank import MemoryBank
 
 # Initialize Agent Logger
 logger = setup_logger("agent_procurement")
@@ -15,6 +16,8 @@ logger = setup_logger("agent_procurement")
 class ProcurementAgent:
     """
     The Procurement Agent is responsible for executing purchase orders.
+
+    It uses Long-Term Memory to avoid unreliable suppliers.
     
     Architecture:
         - **Role**: Supply Chain Buyer.
@@ -32,6 +35,9 @@ class ProcurementAgent:
         self.project_id = settings.GOOGLE_CLOUD_PROJECT
         self.location = settings.GOOGLE_CLOUD_REGION
         self.model_name = settings.MODEL_NAME
+
+        # Initialize Memory Bank
+        self.memory = MemoryBank()
         
         logger.info(f"🤖 Initializing ProcurementAgent with model: {self.model_name}")
         
@@ -64,12 +70,11 @@ class ProcurementAgent:
             You are the Procurement Manager for Sentinell.ai.
             
             YOUR MISSION:
-            1. Receive a buying task (Part Name, Quantity, Urgency).
-            2. Use the 'order_parts_from_supplier' tool to execute the purchase.
-            3. Verify the confirmation message from the supplier.
-            4. Report the Order ID and Cost back to the user.
-            
-            If the supplier rejects the order, report the failure clearly.
+            1. Receive a buying task.
+            2. CHECK MEMORY CONTEXT provided in the prompt for any past issues with suppliers.
+            3. If memory says the supplier is 'Unreliable' or 'Blocked', ABORT the order.
+            4. Otherwise, use 'order_parts_from_supplier' to execute.
+            5. If the order fails, REPORT the failure clearly.
             """
         )
 
@@ -83,6 +88,16 @@ class ProcurementAgent:
                     quantity=int(func_args["quantity"]),
                     urgent=bool(func_args.get("urgent", False))
                 )
+            
+                # --- MEMORY LEARNING MOMENT ---
+                # If an order fails, we should remember it!
+                if "REJECTED" in result:
+                    self.memory.add_learning(
+                        topic="Supplier:Global-Chips-Inc", 
+                        insight=f"Order rejected for {func_args['part_name']}. Reason: {result}",
+                        source="ProcurementAgent"
+                    )
+                return result
             else:
                 return f"Error: Unknown tool '{func_name}'"
         except Exception as e:
@@ -93,20 +108,35 @@ class ProcurementAgent:
         """
         Triggers the agent to place an order.
         
+        Recall Memory
+        We assume for this demo the main supplier is "Global-Chips-Inc"
+        In a real app, we'd look up the supplier for the part first.
+
         Args:
             part_name (str): Item to buy.
             quantity (int): How many.
             risk_level (str): If 'CRITICAL', marks order as urgent.
         """
-        is_urgent = (risk_level.upper() == "CRITICAL")
-        prompt = f"Please purchase {quantity} units of {part_name}. Risk level is {risk_level}."
+        memory_context = self.memory.recall("Supplier:Global-Chips-Inc")
         
-        logger.info(f"🔄 Starting Procurement Task: {prompt}")
+        logger.info(f"🧠 Memory Context retrieved: {memory_context[:100]}...")
+
+        prompt = f"""
+        TASK: Purchase {quantity} units of {part_name}. Risk level is {risk_level}.
+        
+        MEMORY CONTEXT ABOUT SUPPLIER:
+        {memory_context}
+        
+        INSTRUCTION:
+        If the memory indicates recent severe failures, you may choose to warn the user instead of ordering.
+        Otherwise, proceed with the order.
+        """
+        
+        logger.info(f"🔄 Starting Procurement Task...")
         chat = self.model.start_chat()
-        
         response = chat.send_message(prompt)
         
-        # --- ReAct Loop (Simplified) ---
+        # --- ReAct Loop ---
         # Similar logic to Watchtower, but focused on buying
         max_turns = 3
         current_turn = 0
