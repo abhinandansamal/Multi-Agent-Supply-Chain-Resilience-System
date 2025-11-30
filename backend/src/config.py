@@ -32,8 +32,10 @@ class Settings(BaseSettings):
     def DATABASE_PATH(self) -> str:
         """Returns the absolute path to the SQLite database file."""
         current_file = os.path.dirname(os.path.abspath(__file__))
+        # Go up from /src to /backend
         base_dir = os.path.dirname(current_file) 
-        return os.path.join(base_dir, "../data/supply_chain.db")
+
+        return os.path.join(base_dir, "data", "supply_chain.db")
 
     class Config:
         """Pydantic config to read from .env file."""
