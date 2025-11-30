@@ -1,7 +1,7 @@
 import uvicorn
 import random
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field, ConfigDict
 
 # --- Configuration ---
@@ -64,6 +64,13 @@ class OrderResponse(BaseModel):
     total_cost: float
     message: str
 
+# Initialize App
+app = FastAPI(
+    title="External Supplier Agent (Mock)",
+    description="Simulates a vendor API with OpenAPI standards.",
+    version="1.0.0"
+)
+
 # --- Endpoints ---
 
 @app.get("/health", tags=["System"])
@@ -118,6 +125,34 @@ def receive_order(order: PurchaseOrder) -> OrderResponse:
         total_cost=total_cost,
         message=f"Order confirmed. Estimated delivery: {'1 day' if order.urgent else '3 days'}."
     )
+
+# --- Currency Conversion Endpoint (OpenAPI Tool Target) ---
+@app.get("/v1/exchange_rate/{currency}", tags=["Currency"])
+def get_exchange_rate(currency: str):
+    """
+    Returns the exchange rate of a currency against USD.
+    Supported: EUR, TWD, JPY, VND.
+    """
+    # Mock Database of Rates
+    # In a real app, this would query a live Forex service.
+    rates = {
+        "EUR": 0.92,  # 1 USD = 0.92 EUR
+        "TWD": 31.5,  # 1 USD = 31.5 TWD
+        "JPY": 150.0, # 1 USD = 150 JPY
+        "VND": 24500.0, # 1 USD = 24,500 VND
+        "GBP": 0.79   # 1 USD = 0.79 GBP
+    }
+    
+    rate = rates.get(currency.upper())
+    if not rate:
+        raise HTTPException(status_code=404, detail="Currency not supported")
+    
+    return {
+        "base": "USD",
+        "target": currency.upper(),
+        "rate": rate,
+        "timestamp": "2025-11-30T12:00:00Z"
+    }
 
 if __name__ == "__main__":
     # IMPORTANT: We run this on port 8001 to avoid conflict with the main application (8000)
