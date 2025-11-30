@@ -9,6 +9,7 @@ from src.config import settings
 from src.utils.logger import setup_logger
 from src.tools.database_tool import query_inventory_by_region
 from src.tools.search_tool import search_news
+from src.tools.context_utils import compact_context
 
 # Initialize Agent Logger
 logger = setup_logger("agent_watchtower")
@@ -22,6 +23,7 @@ class WatchtowerAgent:
         - **Pattern**: Sequential Loop (Observation -> Thought -> Action -> Observation).
         - **Model**: Gemini (Vertex AI).
         - **Tools**: External Search (News) + Internal Database (Inventory).
+        - **Optimization**: Uses Context Compaction to summarize large search results.
     
     Attributes:
         project_id (str): Google Cloud Project ID.
@@ -105,7 +107,17 @@ class WatchtowerAgent:
             logger.info(f"🛠️ Executing Tool: {func_name} with args: {func_args}")
             
             if func_name == "search_news":
-                return search_news(func_args["query"])
+                # context compaction logic
+                raw_news = search_news(func_args["query"])
+
+                # We compress the news before giving it to the reasoning agent.
+                # This saves tokens and focuses the agent on "Risks" only.
+                compacted_news = compact_context(raw_news, max_words=100)
+                
+                logger.debug(f"Passing compacted context to agent: {compacted_news[:50]}...")
+                
+                return compacted_news
+            
             elif func_name == "query_inventory_by_region":
                 return query_inventory_by_region(func_args["region"])
             else:
@@ -149,8 +161,6 @@ class WatchtowerAgent:
             for part in candidate.content.parts:
                 if part.function_call:
                     function_call = part.function_call
-                    # IMPORTANT: Do not try to read .text on this part, 
-                    # it will raise an error. Move to the next part.
                     continue
                 
                 # If we are here, it is NOT a function call, so we try reading text
