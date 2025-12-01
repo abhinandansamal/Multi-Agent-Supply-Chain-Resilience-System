@@ -2,18 +2,23 @@
 
 import { useState } from "react";
 import { api, ScanResponse } from "@/lib/api";
-import { ShieldAlert, RefreshCw, ShoppingCart, Truck, Activity, AlertTriangle } from "lucide-react";
+import { ShieldAlert, RefreshCw, ShoppingCart, Truck, Activity, AlertTriangle, CheckCircle, XCircle } from "lucide-react";
 
 export default function Dashboard() {
+  // --- STATE MANAGEMENT ---
   const [region, setRegion] = useState("Taiwan");
   const [loading, setLoading] = useState(false);
   const [scanResult, setScanResult] = useState<ScanResponse | null>(null);
-  const [orderStatus, setOrderStatus] = useState<string | null>(null);
+  
+  // Interactive Procurement State
+  const [procurementLog, setProcurementLog] = useState<string[]>([]);
+  const [pendingApproval, setPendingApproval] = useState(false);
 
+  // --- HANDLER: RUN RISK ANALYSIS ---
   const handleScan = async () => {
     setLoading(true);
     setScanResult(null);
-    setOrderStatus(null);
+    setProcurementLog([]); // Clear previous logs
     try {
       const data = await api.scanRegion(region);
       setScanResult(data);
@@ -24,22 +29,55 @@ export default function Dashboard() {
     }
   };
 
-  const handlePurchase = async () => {
-    if (!confirm("Confirm purchase of 50 CPUs from backup supplier?")) return;
+  // --- HANDLER: START PROCUREMENT ---
+  const startPurchase = async () => {
     setLoading(true);
+    setProcurementLog(["Initiating purchase request..."]);
+    setPendingApproval(false);
+    
     try {
+      // Step A: Agent thinks and checks price
       const res = await api.purchaseParts("Logic-Core-CPU", 50);
-      setOrderStatus(res.summary);
+      setProcurementLog(prev => [...prev, `Agent: ${res.summary}`]);
+      
+      // Step B: Check if Agent paused for approval or asked a question
+      if (res.status === "PAUSED_FOR_APPROVAL" || res.summary.includes("?")) {
+        setPendingApproval(true);
+      }
     } catch (err) {
-      alert("Purchase failed. Check console for details.");
+      setProcurementLog(prev => [...prev, "❌ Connection Error: Backend unreachable."]);
     } finally {
       setLoading(false);
     }
   };
 
+  // --- HANDLER: USER SAYS 'YES' ---
+  const confirmPurchase = async () => {
+    setLoading(true);
+    setPendingApproval(false); // Hide buttons
+    setProcurementLog(prev => [...prev, "User: YES, Proceed."]);
+    
+    try {
+      // We call the API again. In a real system, we'd use session IDs.
+      // Here, re-issuing the command forces the agent to proceed since the prompt context resets/updates.
+      const res = await api.purchaseParts("Logic-Core-CPU", 50);
+      setProcurementLog(prev => [...prev, `Agent: ${res.summary}`]);
+    } catch (err) {
+      setProcurementLog(prev => [...prev, "❌ System Error during execution."]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // --- HANDLER: USER SAYS 'NO' ---
+  const cancelPurchase = () => {
+    setPendingApproval(false);
+    setProcurementLog(prev => [...prev, "User: Cancelled operation."]);
+  };
+
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 p-4 md:p-8 font-sans">
-      {/* Header */}
+      {/* --- HEADER --- */}
       <header className="mb-8 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-800 pb-4 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-2">
@@ -55,10 +93,10 @@ export default function Dashboard() {
 
       <main className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* LEFT COLUMN: Controls (4 cols) */}
+        {/* --- LEFT COLUMN: CONTROLS --- */}
         <div className="lg:col-span-4 space-y-6">
           
-          {/* Scan Card */}
+          {/* 1. Risk Monitor Card (Selector + Scan Button) */}
           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg">
             <h2 className="text-lg font-semibold mb-4 text-white flex items-center gap-2">
               <Activity size={20} className="text-blue-400"/> Risk Monitor
@@ -88,7 +126,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Action Card */}
+          {/* 2. Response Actions Card (Purchase Button) */}
           <div className="bg-slate-900 p-6 rounded-xl border border-slate-800 shadow-lg opacity-90">
             <h2 className="text-lg font-semibold mb-2 text-white flex items-center gap-2">
               <ShoppingCart size={20} className="text-green-400"/> Response Actions
@@ -97,8 +135,8 @@ export default function Dashboard() {
               Detected a critical shortage? Authorize the Procurement Agent to negotiate with backup suppliers immediately.
             </p>
             <button 
-              onClick={handlePurchase}
-              disabled={loading || !scanResult}
+              onClick={startPurchase}
+              disabled={loading || !scanResult} // Only enable if we have scanned first
               className={`w-full border-2 font-bold py-3 rounded-lg flex items-center justify-center gap-2 transition-all ${
                 !scanResult 
                   ? "border-slate-700 text-slate-600 cursor-not-allowed"
@@ -106,23 +144,23 @@ export default function Dashboard() {
               }`}
             >
               <Truck size={20} />
-              Replenish Inventory
+              {loading ? "Agent Working..." : "Replenish Inventory"}
             </button>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Feed (8 cols) */}
+        {/* --- RIGHT COLUMN: LIVE FEED --- */}
         <div className="lg:col-span-8 space-y-6">
           <div className="bg-slate-900 min-h-[600px] p-6 rounded-xl border border-slate-800 relative shadow-xl flex flex-col">
             
-            {/* Header Line */}
+            {/* Feed Header */}
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
               <h2 className="text-xl font-semibold text-white">Agent Intelligence Feed</h2>
               <span className="text-xs text-slate-500 font-mono">LIVE CONNECTED</span>
             </div>
 
             {/* Empty State */}
-            {!scanResult && !orderStatus && (
+            {!scanResult && procurementLog.length === 0 && (
               <div className="flex-1 flex flex-col items-center justify-center text-slate-600 space-y-4">
                 <div className="p-4 bg-slate-800/50 rounded-full">
                   <ShieldAlert size={48} />
@@ -132,7 +170,7 @@ export default function Dashboard() {
             )}
 
             <div className="space-y-6">
-              {/* Scan Result */}
+              {/* 3. Scan Result Display */}
               {scanResult && (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="flex items-center gap-3 mb-3">
@@ -155,18 +193,44 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Order Status */}
-              {orderStatus && (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 pb-4">
-                  <div className="bg-green-950/30 border border-green-900 p-4 rounded-lg flex gap-4">
-                    <div className="p-2 bg-green-900/50 rounded h-fit">
-                      <Truck size={24} className="text-green-400" />
+              {/* 4. Interactive Transaction Log */}
+              {procurementLog.length > 0 && (
+                <div className="mt-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                  <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider border-t border-slate-800 pt-4">Transaction Log</h3>
+                  
+                  {procurementLog.map((msg, idx) => (
+                    <div key={idx} className={`p-4 rounded-lg border flex gap-3 items-start ${
+                      msg.startsWith("User") ? "bg-slate-800 border-slate-700 ml-12" : 
+                      msg.startsWith("❌") ? "bg-red-900/20 border-red-800" :
+                      "bg-green-900/10 border-green-900 mr-12"
+                    }`}>
+                      {/* Icon Logic */}
+                      <div className="mt-1">
+                        {msg.startsWith("User") ? <CheckCircle size={16} className="text-blue-400"/> : 
+                         msg.startsWith("❌") ? <XCircle size={16} className="text-red-400"/> :
+                         <Truck size={16} className="text-green-400"/>}
+                      </div>
+                      <p className="text-sm text-slate-300 leading-relaxed">{msg}</p>
                     </div>
-                    <div>
-                      <h3 className="text-green-400 font-bold mb-1">Procurement Agent Update</h3>
-                      <p className="text-green-100/80 text-sm leading-relaxed">{orderStatus}</p>
+                  ))}
+
+                  {/* 5. APPROVAL BUTTONS (Only show when agent pauses) */}
+                  {pendingApproval && (
+                    <div className="flex gap-4 mt-4 justify-end animate-pulse">
+                      <button 
+                        onClick={cancelPurchase}
+                        className="px-4 py-2 rounded-lg border border-red-500 text-red-400 hover:bg-red-900/20 flex items-center gap-2 transition-all"
+                      >
+                        <XCircle size={16} /> Cancel
+                      </button>
+                      <button 
+                        onClick={confirmPurchase}
+                        className="px-6 py-2 rounded-lg bg-green-600 text-white hover:bg-green-500 flex items-center gap-2 shadow-lg transition-all"
+                      >
+                        <CheckCircle size={16} /> Approve Payment
+                      </button>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
             </div>
