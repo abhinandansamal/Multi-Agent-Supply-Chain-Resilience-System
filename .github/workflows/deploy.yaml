@@ -34,10 +34,15 @@ jobs:
           pip install -r requirements.txt
 
       - name: Run Tests
+        env:
+          # Inject environment variables so config.py doesn't crash
+          GOOGLE_CLOUD_PROJECT: ${{ env.PROJECT_ID }}
+          GOOGLE_CLOUD_REGION: ${{ env.REGION }}
+          LOG_LEVEL: "INFO"
         run: |
           cd backend
           # We skip the live agent tests in CI because they require Google Cloud Auth
-          # Ideally, you'd mock Vertex AI here, but for this project we ensure syntax is good
+          # Ideally, we'd mock Vertex AI here, but for this project we ensure syntax is good
           pip install pytest
           # Verify imports work (Basic sanity check)
           python -c "from src.main import app; print('✅ App Import Successful')"
