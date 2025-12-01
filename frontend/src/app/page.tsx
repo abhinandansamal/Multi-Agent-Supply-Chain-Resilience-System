@@ -81,7 +81,7 @@ export default function Dashboard() {
       <header className="mb-8 flex flex-col md:flex-row items-start md:items-center justify-between border-b border-slate-800 pb-4 gap-4">
         <div>
           <h1 className="text-3xl font-bold text-white flex items-center gap-2">
-            <ShieldAlert className="text-blue-500" /> Sentinell.ai
+            <ShieldAlert className="text-blue-500" /> Multi-Agent-Supply-Chain-Resilience-System
           </h1>
           <p className="text-slate-400 text-sm">Autonomous Supply Chain Resilience System</p>
         </div>
