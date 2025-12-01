@@ -144,6 +144,13 @@ ENV/
 env.bak/
 venv.bak/
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+terraform.tfvars
+
 # Spyder project settings
 .spyderproject
 .spyproject
@@ -205,3 +212,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
