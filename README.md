@@ -93,7 +93,7 @@ graph TD
 #### 1. Clone & Setup
 
 ```bash
-git clone [https://github.com/abhinandansamal/sentinell-autonomous-supply-chain.git](https://github.com/abhinandansamal/sentinell-autonomous-supply-chain.git)
+git clone https://github.com/abhinandansamal/sentinell-autonomous-supply-chain.git
 
 cd sentinell-autonomous-supply-chain
 ```
