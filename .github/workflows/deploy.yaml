@@ -5,6 +5,7 @@ on:
     branches: [ "main" ]
     paths:
       - 'backend/**' # Only run if backend changes
+      - '.github/workflows/**' # Also run if we change the workflow file itself
 
 env:
   PROJECT_ID: sentinell-supply-chain
