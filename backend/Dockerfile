@@ -25,4 +25,4 @@ ENV PYTHONUNBUFFERED=1
 
 # 6. Define the Start Command
 # We use the module syntax (-m) just like we did locally
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "4"]
+CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "2"]
