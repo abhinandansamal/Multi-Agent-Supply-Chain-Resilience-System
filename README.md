@@ -1,4 +1,4 @@
-# Multi-Agent Supply Chain Resilience System 🛡️
+# Multi-Agent Supply Chain Resilience System
 ### Autonomous Supply Chain Resilience System
 
 ![Build Status](https://img.shields.io/github/actions/workflow/status/abhinandansamal/Multi-Agent-Supply-Chain-Resilience-System/deploy.yaml?style=for-the-badge&label=CI%2FCD)
@@ -104,46 +104,73 @@ graph TD
 ---
 
 ## ⚡ Getting Started
-#### Prerequisites
-* Google Cloud Project with Vertex AI API enabled.
-* Python 3.11+ & Node.js 18+.
-* `gcloud` CLI installed and authenticated.
+Follow these steps to replicate the project in a fresh environment (e.g., GitHub Codespaces or Local Machine).
 
-#### 1. Clone & Setup
+### 0. Prerequisites & Cloud Setup
+* Google Cloud Project with **Vertex AI API** enabled.
+* Python 3.11+ & Node.js 18+.
+
+**⚠️ Important for GitHub Codespaces:**
+If running in a fresh Codespace, you must first install the Google Cloud CLI and authenticate. Run these commands in your terminal:
+
+```bash
+# 1. Install gcloud CLI (Required for Codespaces)
+sudo apt-get update && sudo apt-get install -y apt-transport-https ca-certificates gnupg
+echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] [https://packages.cloud.google.com/apt](https://packages.cloud.google.com/apt) cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+curl [https://packages.cloud.google.com/apt/doc/apt-key.gpg](https://packages.cloud.google.com/apt/doc/apt-key.gpg) | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+sudo apt-get update && sudo apt-get install -y google-cloud-cli
+
+# 2. Authenticate with Google Cloud
+# Follow the link, login, and paste the code back into the terminal.
+gcloud auth application-default login
+```
+
+### 1. Clone & Setup
 
 ```bash
 git clone https://github.com/abhinandansamal/Multi-Agent-Supply-Chain-Resilience-System.git
 
-cd multi-agent-supply-chain-resilience-system
+cd Multi-Agent-Supply-Chain-Resilience-System
 ```
 
-#### 2. Backend Setup
+### 2. Backend Setup
 ```bash
 cd backend
 python -m venv venv
 source venv/bin/activate  # or venv\Scripts\activate on Windows
 pip install -r requirements.txt
 
-# Create .env file
+# --- Configuration ---
+# REPLACE 'your-project-id' with your actual Google Cloud Project ID (e.g., sentinell-supply-chain)
 echo "GOOGLE_CLOUD_PROJECT=your-project-id" > .env
 echo "GOOGLE_CLOUD_REGION=us-central1" >> .env
+echo "LOG_LEVEL=INFO" >> .env
 
-# Initialize Data
+# --- Initialization ---
+# Create the SQLite database and seed mock data
 python src/tools/generate_data.py
 
-# Run Server (Auto-mounts Supplier API on port 8080)
+# --- Run Server ---
+# Starts the API on http://localhost:8080
 python -m src.main
 ```
 
-#### 3. Frontend Setup
+### 3. Frontend Setup
+Open a new terminal (keep the backend running) to set up the Dashboard.
+
 ```bash
 cd ../frontend
 npm install
 
-# Create .env.local
+# --- Connect to Backend ---
+# OPTION A: If you have deployed to Cloud Run (Use your Terraform/Cloud Run URL)
+# echo "NEXT_PUBLIC_API_URL=https://your-cloud-run-url.a.run.app" > .env.local
+
+# OPTION B: If running locally in Codespaces/Localhost
+# Note: In Codespaces, ensure port 8080 is public or use the localhost address
 echo "NEXT_PUBLIC_API_URL=http://localhost:8080" > .env.local
 
-# Run Dashboard
+# --- Run Dashboard ---
 npm run dev
 ```
 
